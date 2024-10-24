@@ -392,6 +392,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     private Bulletin messageSeenPrivacyBulletin;
     TextView webBotTitle;
     public SearchTagsList actionBarSearchTags;
+    public boolean scrollByTouch;
     public ChatSearchTabs hashtagSearchTabs;
     private FrameLayout searchUpButton;
     private ImageView searchUpButtonArrow;
@@ -1101,7 +1102,6 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     private int fixedKeyboardHeight = -1;
     private Runnable cancelFixedPositionRunnable;
     private boolean invalidateMessagesVisiblePart;
-    private boolean scrollByTouch;
     int dialogFolderId;
     int dialogFilterId;
     boolean pulled = false;

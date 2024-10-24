@@ -531,13 +531,13 @@ public class RecordControl extends View implements FlashViews.Invertable {
                     metaballsPath.cubicTo(h1.x, h1.y, h3.x, h3.y, p3.x, p3.y);
                     metaballsPath.lineTo(p4.x, p4.y);
                     metaballsPath.cubicTo(h4.x, h4.y, h2.x, h2.y, p2.x, p2.y);
-                    metaballsPath.lineTo(p1.x, p1.y);
+//                    metaballsPath.lineTo(p1.x, p1.y);
 
                     redPaint.setAlpha((int) (0xFF * alpha));
                     canvas.drawPath(metaballsPath, redPaint);
 
-                    AndroidUtilities.rectTmp.set(acx - r, cy - r, acx + r, cy + r);
-                    canvas.drawRoundRect(AndroidUtilities.rectTmp, rad, rad, redPaint);
+//                    AndroidUtilities.rectTmp.set(acx - r, cy - r, acx + r, cy + r);
+//                    canvas.drawRoundRect(AndroidUtilities.rectTmp, rad, rad, redPaint);
                 }
             }
         }

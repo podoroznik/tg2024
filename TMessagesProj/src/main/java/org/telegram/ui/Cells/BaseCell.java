@@ -61,10 +61,20 @@ public abstract class BaseCell extends ViewGroup implements SizeNotifierFrameLay
         }
     }
 
+    private final class CheckForShowQuickShare implements Runnable {
+        public void run() {
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                MotionEvent event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 69);
+                onTouchEvent(event);
+                event.recycle();
+        }
+    }
+
     private boolean checkingForLongPress = false;
     private CheckForLongPress pendingCheckForLongPress = null;
     private int pressCount = 0;
     private CheckForTap pendingCheckForTap = null;
+    private CheckForShowQuickShare pendingCheckForQuickShare = null;
 
     public BaseCell(Context context) {
         super(context);
@@ -110,6 +120,17 @@ public abstract class BaseCell extends ViewGroup implements SizeNotifierFrameLay
         postDelayed(pendingCheckForTap, ViewConfiguration.getTapTimeout());
     }
 
+    protected void startShouldShowQuickShareWindow() {
+        if (checkingForLongPress) {
+            return;
+        }
+        checkingForLongPress = true;
+        if (pendingCheckForTap == null) {
+            pendingCheckForQuickShare = new CheckForShowQuickShare();
+        }
+        postDelayed(pendingCheckForQuickShare, ViewConfiguration.getTapTimeout());
+    }
+
     protected void cancelCheckLongPress() {
         checkingForLongPress = false;
         if (pendingCheckForLongPress != null) {
@@ -117,6 +138,9 @@ public abstract class BaseCell extends ViewGroup implements SizeNotifierFrameLay
         }
         if (pendingCheckForTap != null) {
             removeCallbacks(pendingCheckForTap);
+        }
+        if(pendingCheckForQuickShare != null){
+            removeCallbacks(pendingCheckForQuickShare);
         }
     }
 
