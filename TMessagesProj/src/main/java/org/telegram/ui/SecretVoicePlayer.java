@@ -356,7 +356,7 @@ public class SecretVoicePlayer extends Dialog {
             final int finalHeight = height;
             videoDp = (int) Math.ceil(Math.min(width, height) * .92f / AndroidUtilities.density);
 
-            myCell = new ChatMessageCell(getContext(), UserConfig.selectedAccount, false, null, cell.getResourcesProvider()) {
+            myCell = new ChatMessageCell(getContext(), UserConfig.selectedAccount, false, null, cell.getResourcesProvider(),null) {
 
                 @Override
                 public int getBoundsLeft() {

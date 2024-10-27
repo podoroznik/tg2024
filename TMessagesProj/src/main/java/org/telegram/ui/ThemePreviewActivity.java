@@ -5390,7 +5390,7 @@ public class ThemePreviewActivity extends BaseFragment implements DownloadContro
                             Theme.ResourcesProvider.super.applyServiceShaderMatrix(w, h, translationX, translationY);
                         }
                     }
-                });
+                },null);
                 ChatMessageCell chatMessageCell = (ChatMessageCell) view;
                 chatMessageCell.setDelegate(new ChatMessageCell.ChatMessageCellDelegate() {
 

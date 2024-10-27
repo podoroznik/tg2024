@@ -1058,7 +1058,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
 
     private class MessageCell extends ChatMessageCell {
         public MessageCell(Context context, int currentAccount, boolean canDrawBackgroundInParent, ChatMessageSharedResources sharedResources, Theme.ResourcesProvider resourcesProvider) {
-            super(context, currentAccount, canDrawBackgroundInParent, sharedResources, resourcesProvider);
+            super(context, currentAccount, canDrawBackgroundInParent, sharedResources, resourcesProvider,null);
         }
 
         @Override
@@ -1827,7 +1827,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
             return 0;
         }
         if (dummyMessageCell == null) {
-            dummyMessageCell = new ChatMessageCell(getContext(), currentAccount, true, null, resourcesProvider);
+            dummyMessageCell = new ChatMessageCell(getContext(), currentAccount, true, null, resourcesProvider,null);
         }
         dummyMessageCell.isChat = false;
         dummyMessageCell.isSavedChat = false;

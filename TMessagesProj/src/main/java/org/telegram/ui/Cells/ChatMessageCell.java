@@ -8,7 +8,6 @@
 
 package org.telegram.ui.Cells;
 
-import static android.graphics.Color.BLACK;
 import static android.graphics.Color.WHITE;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
@@ -39,17 +38,14 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
-import android.graphics.RadialGradient;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RotateDrawable;
 import android.graphics.text.LineBreaker;
 import android.net.Uri;
 import android.os.Build;
@@ -67,7 +63,6 @@ import android.text.style.CharacterStyle;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.text.style.URLSpan;
-import android.util.Log;
 import android.util.Pair;
 import android.util.Property;
 import android.util.SparseArray;
@@ -147,7 +142,6 @@ import org.telegram.ui.Components.AnimationProperties;
 import org.telegram.ui.Components.AudioVisualizerDrawable;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackgroundGradientDrawable;
-import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CheckBoxBase;
 import org.telegram.ui.Components.ClipRoundedDrawable;
@@ -193,6 +187,7 @@ import org.telegram.ui.Components.URLSpanBotCommand;
 import org.telegram.ui.Components.URLSpanBrowser;
 import org.telegram.ui.Components.URLSpanMono;
 import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.Components.VectorAvatarThumbDrawable;
 import org.telegram.ui.Components.VideoForwardDrawable;
 import org.telegram.ui.Components.spoilers.SpoilerEffect;
@@ -232,6 +227,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     public boolean shouldCheckVisibleOnScreen;
     public float parentBoundsTop;
     public int parentBoundsBottom;
+    Rect undoLocation;
+    Rect thisRect = new Rect();
+
 
     public ExpiredStoryView expiredStoryView;
     private boolean skipFrameUpdate;
@@ -277,7 +275,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 Long uid = (Long) args[0];
                 if (currentUser.id == uid) {
                     setAvatar(currentMessageObject);
-                }else{
+                } else {
                     invalidate();
                     if (((View) getParent()) != null) {
                         ((View) getParent()).invalidate();
@@ -1087,7 +1085,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     ArrayList<TLRPC.Dialog> allDialogs;
     ArrayList<TLRPC.Dialog> dialogsForDisplay;
+    long dialogsCount;
 
+    private Rect[] cords = new Rect[5];
 
     private StaticLayout infoLayout;
     private StaticLayout loadingProgressLayout;
@@ -1389,6 +1389,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     public int instantDrawableColor;
     public Drawable instantDrawable;
     public ReplyMessageLine quoteLine, linkLine, replyLine, contactLine, factCheckLine;
+    private ChatActivity parentChatActivity;
+
 
     private AnimatedFloat translationLoadingFloat;
     private LinkPath translationLoadingPath;
@@ -1589,6 +1591,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private float roundToPauseProgress2;
     private float roundPlayingDrawableProgress;
     private long lastSeekUpdateTime;
+    private ValueAnimator quickShareActiveVauleAnimator;
+    private int quickShareActive = -1;
+    private float animatedAvatarId = -1;
+    private int quickShareLastActive = -1;
+    private MotionEvent lastEvent;
 
     float seekbarRoundX;
     float seekbarRoundY;
@@ -1616,18 +1623,26 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private final Path sPath = new Path();
     public boolean isBlurred;
     private float quickShareProgress;
+    private float quickShareProgress2;
+    private float avatarProgress;
+    private float quickShareActiveProgress;
     private ValueAnimator quickShareValueAnimator;
+    private ValueAnimator quickShareValueAnimator2;
+    private ValueAnimator avatarValueAnimator;
 
     public ChatMessageCell(Context context, int currentAccount) {
-        this(context, currentAccount, false, null, null);
+        this(context, currentAccount, false, null, null, null);
     }
 
-    public ChatMessageCell(Context context, int currentAccount, boolean canDrawBackgroundInParent, ChatMessageSharedResources sharedResources, Theme.ResourcesProvider resourcesProvider) {
+    public ChatMessageCell(Context context, int currentAccount, boolean canDrawBackgroundInParent, ChatMessageSharedResources sharedResources, Theme.ResourcesProvider resourcesProvider, ChatActivity chatActivity) {
         super(context);
         this.currentAccount = currentAccount;
         this.resourcesProvider = resourcesProvider;
         this.canDrawBackgroundInParent = canDrawBackgroundInParent;
         this.sharedResources = sharedResources;
+        if (parentChatActivity2 == null) {
+            parentChatActivity2 = chatActivity;
+        }
         if (this.sharedResources == null) {
             this.sharedResources = new ChatMessageSharedResources(context);
         }
@@ -1651,7 +1666,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         photoImage.setUseRoundForThumbDrawable(true);
         photoImage.setDelegate(this);
         blurredPhotoImage = new ImageReceiver(this);
-        redPaint.setColor(WHITE);
+
+
+        quickSharePaint.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        quickShareTextPaint.setColor(WHITE);
+        quickShareTextPaint.setTextSize(dp(16));
+        quickShareNamePaint.setColor(Color.BLACK);
+        quickShareNamePaint.setAlpha((int) (0.4f * 0xFF));
         blurredPhotoImage.setAllowLoadingOnAttachedOnly(true);
         blurredPhotoImage.setUseRoundForThumbDrawable(true);
         radialProgress = new RadialProgress2(this, resourcesProvider);
@@ -1718,6 +1739,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         quickShareValueAnimator = ValueAnimator.ofFloat(0f, 1f);
         quickShareValueAnimator.setDuration(600);
+        quickShareValueAnimator.setInterpolator(new OvershootInterpolator(0.7f));
         quickShareValueAnimator.addUpdateListener(animation -> {
             quickShareProgress = (float) animation.getAnimatedValue();
             if (quickShareProgress == 1f) {
@@ -1728,8 +1750,42 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 ((View) getParent()).invalidate();
             }
         });
+        quickShareValueAnimator2 = ValueAnimator.ofFloat(0f, 1f);
+        quickShareValueAnimator2.setDuration(600);
+        quickShareValueAnimator2.setInterpolator(new LinearInterpolator());
+        quickShareValueAnimator2.addUpdateListener(animation -> {
+            quickShareProgress2 = (float) animation.getAnimatedValue();
+        });
+        quickShareActiveVauleAnimator = ValueAnimator.ofFloat(0f, 1f);
+        quickShareActiveVauleAnimator.setDuration(150);
+        quickShareActiveVauleAnimator.addUpdateListener(animation -> {
+            quickShareActiveProgress = (float) animation.getAnimatedValue();
+            if (quickShareProgress == 1f) {
+                quickShareShown = true;
+                onTouchEvent(lastEvent);
+
+            }
+            invalidate();
+            if (((View) getParent()) != null) {
+                ((View) getParent()).invalidate();
+            }
+        });
+        avatarValueAnimator = ValueAnimator.ofFloat(0f, 1f);
+        avatarValueAnimator.setDuration(400);
+        avatarValueAnimator.addUpdateListener(animation -> {
+                    avatarProgress = (float) animation.getAnimatedValue();
+                    if (avatarProgress == 1f) {
+                        animatedAvatarId = -1;
+                    }
+                    invalidate();
+                    if (((View) getParent()) != null) {
+                        ((View) getParent()).invalidate();
+                    }
+                }
+        );
         allDialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
-        dialogsForDisplay = allDialogs.stream().filter(entity -> MessagesController.getInstance(currentAccount).getUser(entity.id) != null && !UserObject.isReplyUser(MessagesController.getInstance(currentAccount).getUser(entity.id))).collect(Collectors.toCollection(ArrayList::new));
+        dialogsForDisplay = allDialogs.stream().filter(entity -> MessagesController.getInstance(currentAccount).getUser(entity.id) != null && !UserObject.isReplyUser(MessagesController.getInstance(currentAccount).getUser(entity.id))).limit(5).collect(Collectors.toCollection(ArrayList::new));
+        dialogsCount = dialogsForDisplay.stream().count();
         imageReceiver = new ImageReceiver();
         imageReceiver.setCrossfadeByScale(0);
     }
@@ -3920,8 +3976,63 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return result;
     }
 
+    public static ChatActivity parentChatActivity2;
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_MOVE) {
+            lastEvent = event;
+        }
+        if (quickShareShown) {
+            boolean wasMatch = false;
+
+            for (int i = 0; i < dialogsCount; i++) {
+                Rect cord = cords[i];
+                if (event.getX() >= cord.left && event.getX() <= cord.right &&
+                        event.getY() >= cord.top && event.getY() <= cord.bottom) {
+                    wasMatch = true;
+                    if (event.getAction() == MotionEvent.ACTION_UP) {
+                        ArrayList<MessageObject> al = new ArrayList(1);
+                        al.add(currentMessageObject);
+                        TLRPC.Dialog dialog = dialogsForDisplay.get(i);
+                        if (parentChatActivity2 != null) {
+                            parentChatActivity2.deleteUndoView();
+
+                            parentChatActivity2.createUndoView(getContext());
+
+                        }
+                        int result = SendMessagesHelper.getInstance(currentAccount).sendMessage(al, dialog.id, true, false, true, 0, null);
+                        animatedAvatarId = i;
+                        avatarValueAnimator.start();
+                        undoLocation = parentChatActivity2.undoViewLocation();
+                        AndroidUtilities.runOnUIThread(() -> {
+                            if (parentChatActivity2.undoView != null) {
+                                parentChatActivity2.undoView.showWithAction(dialog.id, UndoView.ACTION_FWD_MESSAGES, 1);
+                            }
+                        }, 300);
+                    } else if (event.getAction() == MotionEvent.ACTION_MOVE && !quickShareActiveVauleAnimator.isRunning()) {
+                        if (quickShareActive != i) {
+                            quickShareLastActive = quickShareActive;
+                            quickShareActive = i;
+                            quickShareActiveVauleAnimator.start();
+
+                        }
+                    }
+                }
+            }
+            if (event.getAction() == MotionEvent.ACTION_MOVE && !wasMatch && quickShareActive != -1) {
+                if (!(event.getX() >= rect2.left) || !(event.getX() <= rect2.right) ||
+                        !(event.getY() >= rect2.top) || !(event.getY() <= rect2.bottom)) {
+                    if (!quickShareActiveVauleAnimator.isRunning()) {
+
+                        quickShareLastActive = quickShareActive;
+                        quickShareActive = -1;
+                        quickShareActiveVauleAnimator.start();
+                    }
+                }
+            }
+        }
+
         boolean asd = false;
         if (event.getMetaState() == 69) {
             getParent().requestDisallowInterceptTouchEvent(true);
@@ -3930,7 +4041,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 return true;
             }
 
+            quickShareActive = -1;
+            quickShareLastActive = -1;
+            quickShareShown = false;
             quickShareValueAnimator.start();
+            quickShareValueAnimator2.start();
             return true;
         }
 
@@ -18372,16 +18487,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
-    private final Point p1 = new Point(), p2 = new Point(), p3 = new Point(), p4 = new Point(), h1 = new Point(), h2 = new Point(), h3 = new Point(), h4 = new Point();
-    private final float HALF_PI = (float) Math.PI / 2;
-    private Path metaballsPath = new Path();
-    private final Paint redPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint quickSharePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint quickShareNamePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint quickShareTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    private final Rect bounds = new Rect();
+    private final RectF r3 = new RectF();
     private final DecelerateInterpolator interpolator = new DecelerateInterpolator();
-
-    private float dist(Point a, Point b) {
-        return com.google.zxing.common.detector.MathUtils.distance(a.x, a.y, b.x, b.y);
-    }
-
 
     private void drawSideButton(Canvas canvas) {
         if (drawSideButton != 0) {
@@ -18439,16 +18551,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 sideStartY -= offsetY;
             }
             sideButtonVisible = true;
-            if (quickShareValueAnimator != null && quickShareValueAnimator.isRunning()) {
-                rect2.set(sideStartX - (dp(240) - (layoutWidth - sideStartX - dp(32) + dp(4))) * quickShareProgress * quickShareProgress, sideStartY - (AndroidUtilities.dp(74) * interpolator.getInterpolation(quickShareProgress)), (layoutWidth - sideStartX - dp(32) - dp(4)) * quickShareProgress * quickShareProgress + sideStartX + AndroidUtilities.dp(32), sideStartY - (AndroidUtilities.dp(48) * interpolator.getInterpolation(quickShareProgress)) + AndroidUtilities.dp(32));
-                if (quickShareProgress <= 0.4) {
-                    sideStartY -= AndroidUtilities.dp(12) * quickShareProgress * 2.5f;
+            rect2.set(sideStartX - ((dp(48) * dialogsCount) - (layoutWidth - sideStartX - dp(32) +( dialogsCount != 5 ? (dp(4) * 4 - dialogsCount) : dp(8)))) * quickShareProgress * quickShareProgress, sideStartY - (AndroidUtilities.dp(74) * interpolator.getInterpolation(quickShareProgress)), (layoutWidth - sideStartX - dp(32) - dp(4)) * quickShareProgress * quickShareProgress + sideStartX + AndroidUtilities.dp(32), sideStartY - (AndroidUtilities.dp(48) * interpolator.getInterpolation(quickShareProgress)) + AndroidUtilities.dp(32));
 
-                } else if (quickShareProgress > 0.4 && quickShareProgress <= 0.8) {
-                    sideStartY -= ((quickShareProgress - 0.4f) * 2.5f * -AndroidUtilities.dp(16)) + AndroidUtilities.dp(12);
+            if (quickShareValueAnimator != null && quickShareValueAnimator.isRunning()) {
+                if (quickShareProgress2 <= 0.4) {
+                    sideStartY -= AndroidUtilities.dp(12) * quickShareProgress2 * 2.5f;
+
+                } else if (quickShareProgress2 > 0.4 && quickShareProgress2 <= 0.8) {
+                    sideStartY -= ((quickShareProgress2 - 0.4f) * 2.5f * -AndroidUtilities.dp(16)) + AndroidUtilities.dp(12);
 
                 } else {
-                    sideStartY -= ((quickShareProgress - 0.8f) * 5f * 4f) - 4f;
+                    sideStartY -= ((quickShareProgress2 - 0.8f) * 5f * 4f) - 4f;
                 }
 
             }
@@ -18536,12 +18649,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     if (quickShareValueAnimator != null && quickShareValueAnimator.isRunning()) {
                         canvas.save();
                         float progress;
-                        if (quickShareProgress <= 0.4) {
-                            progress = quickShareProgress * 2.5f * -45f;
-                        } else if (quickShareProgress > 0.4 && quickShareProgress <= 0.8) {
-                            progress = (quickShareProgress - 0.4f) * 2.5f * 75f - 45f;
+                        if (quickShareProgress2 <= 0.4) {
+                            progress = quickShareProgress2 * 2.5f * -45f;
+                        } else if (quickShareProgress2 > 0.4 && quickShareProgress2 <= 0.8) {
+                            progress = (quickShareProgress2 - 0.4f) * 2.5f * 75f - 45f;
                         } else {
-                            progress = ((quickShareProgress - 0.8f) * 5f * -30f) + 30f;
+                            progress = ((quickShareProgress2 - 0.8f) * 5f * -30f) + 30f;
                         }
                         canvas.rotate(progress, sideStartX + AndroidUtilities.dp(16), sideStartY + AndroidUtilities.dp(16));
                         drawable.draw(canvas);
@@ -18550,52 +18663,131 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         drawable.draw(canvas);
                     }
 
-                    redPaint.setAlpha((int) (256 * (quickShareProgress + 0.4f)));
-                    redPaint.setShadowLayer(dp(1.34f), 0, dp(0.34f), 0x18000000);
-
-
+                    quickSharePaint.setAlpha((int) (256 * (quickShareProgress + 0.4f)));
+                    quickSharePaint.setShadowLayer(dp(1.34f), 0, dp(0.34f), 0x18000000);
 
                     if (quickShareValueAnimator != null && quickShareValueAnimator.isRunning() || quickShareShown) {
-                        canvas.drawRoundRect(rect2, AndroidUtilities.dp(32), AndroidUtilities.dp(32), redPaint);
+                        canvas.drawRoundRect(rect2, AndroidUtilities.dp(32), AndroidUtilities.dp(32), quickSharePaint);
+                    }
+                    if (quickShareValueAnimator != null && quickShareValueAnimator.isRunning() || quickShareShown || avatarValueAnimator.isRunning()) {
                         canvas.save();
-                        canvas.translate(rect2.left + dp(8), rect2.top + dp(8));
-                        for (int i = 0; i < 5; i++) {
-                            if (i == 2) {
-                                quickImageScale = quickShareProgress;
-                            } else if (i == 1 || i == 3) {
-                                quickImageScale = (float) Math.pow(quickShareProgress, 2);
-                            } else {
-                                quickImageScale = (float) Math.pow(quickShareProgress, 7);
-                            }
-                            float size = 42f;
-                            float sizeA = dp(size) * quickImageScale;
-                            canvas.translate(i != 0 ? sizeA : 0f, dp(size / 2) * (1 - quickImageScale));
-                            avatarDrawable.setBounds(0, 0, (int) sizeA, (int) (dp(size) * quickImageScale));
-                            user = MessagesController.getInstance(currentAccount).getUser(dialogsForDisplay.get(i).id);
-                            avatarDrawable.setInfo(currentAccount, user);
+                        getGlobalVisibleRect(thisRect);
+                        if (avatarValueAnimator.isRunning()) {
+                            for (int i = 0; i < dialogsCount; i++) {
+                                if (animatedAvatarId != i) {
+                                    continue;
+                                }
+                                float yTrans;
+                                if (avatarProgress < 0.8f) {
+                                    yTrans = -dp(20) * avatarProgress * 1.25f;
+                                } else {
+                                    yTrans = -dp(20) + (dp(400)) * (avatarProgress - 0.8f) * 5f;
+                                }
+                                canvas.translate(rect2.left + dp(8) + (i * dp(58)) + (-thisRect.left - (rect2.left + dp(8) + (i * dp(58))) + dp(18)) * avatarProgress, rect2.top + dp(8) + yTrans);
 
-                            imageReceiver.setForUserOrChat(user, avatarDrawable);
-                            imageReceiver.setImageCoords(0, 0, sizeA, sizeA);
-                            imageReceiver.setRoundRadius(dp(28 * quickImageScale));
-                            if (UserObject.isUserSelf(user)) {
-                                avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
-                                avatarDrawable.setScaleSize(quickImageScale);
-                                avatarDrawable.draw(canvas);
-                            } else {
-                                imageReceiver.draw(canvas);
+                                quickImageScale = 1 - (avatarProgress * avatarProgress * 0.9f);
+
+                                float size = 42f;
+                                float sizeA = dp(size) * quickImageScale;
+                                avatarDrawable.setBounds(0, 0, (int) sizeA, (int) (dp(size) * quickImageScale));
+                                user = MessagesController.getInstance(currentAccount).getUser(dialogsForDisplay.get(i).id);
+                                avatarDrawable.setInfo(currentAccount, user);
+
+
+                                imageReceiver.setAlpha(1);
+                                avatarDrawable.setAlpha(0xFF);
+
+                                imageReceiver.setForUserOrChat(user, avatarDrawable);
+                                imageReceiver.setImageCoords(0, 0, sizeA, sizeA);
+                                imageReceiver.setRoundRadius(dp(28 * quickImageScale));
+                                if (UserObject.isUserSelf(user)) {
+                                    avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
+                                    avatarDrawable.setScaleSize(quickImageScale);
+                                    avatarDrawable.draw(canvas);
+                                } else {
+                                    imageReceiver.draw(canvas);
+                                }
                             }
-                            canvas.translate( dp(8) * quickImageScale, -dp(size / 2) * (1 - quickImageScale));
+                        } else {
+                            canvas.translate(rect2.left + dp(8), rect2.top + dp(8));
+                            for (int i = 0; i < dialogsCount; i++) {
+                                float activeTranslation = (quickShareActive == i ? (dp(4) * quickShareActiveProgress) : 0);
+                                float lastActiveTranslation = (quickShareLastActive == i ? (dp(4) * (1 - quickShareActiveProgress)) : 0);
+                                if (dialogsCount == 5) {
+                                    if (i == 2) {
+                                        quickImageScale = quickShareProgress;
+                                    } else if (i == 1 || i == 3) {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 2);
+                                    } else {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 7);
+                                    }
+                                }
+                                if (dialogsCount == 4) {
+                                    if (i == 1 || i == 2) {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 2);
+                                    } else {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 7);
+                                    }
+                                }
+                                if (dialogsCount == 3) {
+                                    if (i == 1) {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 2);
+                                    } else {
+                                        quickImageScale = (float) Math.pow(quickShareProgress, 7);
+                                    }
+                                }
+                                if (dialogsCount == 2 || dialogsCount == 1) {
+                                    quickImageScale = (float) Math.pow(quickShareProgress, 2);
+                                }
+                                float size = 42f;
+                                cords[i] = new Rect((int) (rect2.left + dp(8) + i * (dp(size) + dp(8))), (int) (rect2.top + dp(8)), (int) (rect2.left + dp(8) + i * (dp(size) + dp(8)) + dp(size)), (int) (rect2.top + dp(8) + dp(size)));
+
+                                float sizeA = dp(size) * quickImageScale + activeTranslation + lastActiveTranslation;
+                                canvas.translate(i != 0 ? sizeA - activeTranslation - lastActiveTranslation : 0f, dp(size / 2) * (1 - quickImageScale) - activeTranslation - lastActiveTranslation);
+                                avatarDrawable.setBounds(0, 0, (int) sizeA, (int) (dp(size) * quickImageScale));
+                                user = MessagesController.getInstance(currentAccount).getUser(dialogsForDisplay.get(i).id);
+                                avatarDrawable.setInfo(currentAccount, user);
+
+                                if (quickShareActive == i) {
+                                    String fn = !UserObject.isUserSelf(user) ? user.first_name : LocaleController.getString(R.string.SavedMessagesTab2);
+                                    int w = (int) quickShareTextPaint.measureText(fn);
+                                    quickShareTextPaint.getTextBounds(fn, 0, 1, bounds);
+                                    r3.set(-dp(8), -dp(28) - bounds.height(), w + dp(8), -dp(12));
+                                    canvas.drawRoundRect(r3, dp(12), dp(12), quickShareNamePaint);
+                                    canvas.drawText(fn, 0, -dp(20), quickShareTextPaint);
+                                }
+
+                                if (quickShareLastActive == i) {
+                                    imageReceiver.setAlpha((quickShareActiveProgress * 0.5f));
+                                    avatarDrawable.setAlpha((int) (((quickShareActiveProgress * 0.5f)) * 0xFF));
+                                }
+
+                                if (quickShareActive != -1 && quickShareActive != i) {
+                                    imageReceiver.setAlpha(1 - (quickShareActiveProgress * 0.5f));
+                                    avatarDrawable.setAlpha((int) ((1 - (quickShareActiveProgress * 0.5f)) * 0xFF));
+                                } else {
+                                    imageReceiver.setAlpha(1);
+                                    avatarDrawable.setAlpha(0xFF);
+                                }
+
+                                imageReceiver.setForUserOrChat(user, avatarDrawable);
+                                imageReceiver.setImageCoords(0, 0, sizeA, sizeA);
+                                imageReceiver.setRoundRadius(dp(28 * quickImageScale));
+                                if (UserObject.isUserSelf(user)) {
+                                    avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
+                                    avatarDrawable.setScaleSize(quickImageScale);
+                                    avatarDrawable.draw(canvas);
+                                } else {
+                                    imageReceiver.draw(canvas);
+                                }
+                                canvas.translate(dp(8) * quickImageScale, -dp(size / 2) * (1 - quickImageScale) + activeTranslation + lastActiveTranslation);
+                            }
                         }
                         canvas.restore();
                     }
                 }
             }
         }
-    }
-
-    private void getVector(float cx, float cy, double a, float r, Point point) {
-        point.x = (float) (cx + Math.sin(a) * r);
-        point.y = (float) (cy + Math.cos(a) * r);
     }
 
     public void setTimeAlpha(float value) {

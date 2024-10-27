@@ -1497,7 +1497,7 @@ public class MessagePreviewView extends FrameLayout {
             @NonNull
             @Override
             public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-                ChatMessageCell chatMessageCell = new ChatMessageCell(parent.getContext(), currentAccount, false, sharedResources, resourcesProvider) {
+                ChatMessageCell chatMessageCell = new ChatMessageCell(parent.getContext(), currentAccount, false, sharedResources, resourcesProvider,null) {
                     @Override
                     public void invalidate() {
                         super.invalidate();

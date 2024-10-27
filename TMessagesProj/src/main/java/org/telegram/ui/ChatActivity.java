@@ -339,9 +339,9 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     private ActionBarMenuItem.Item openForumItem;
     private ClippingImageView animatingImageView;
     private ThanosEffect chatListThanosEffect;
-    private RecyclerListView chatListView;
+    public RecyclerListView chatListView;
     private ChatListItemAnimator chatListItemAnimator;
-    private GridLayoutManagerFixed chatLayoutManager;
+    public GridLayoutManagerFixed chatLayoutManager;
     private ChatActivityAdapter chatAdapter;
     private UnreadCounterTextView bottomOverlayChatText;
     private boolean bottomOverlayLinks;
@@ -542,7 +542,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     private int hashtagSearchSelectedIndex;
     private int searchLastCount;
     private int searchLastIndex;
-    private UndoView undoView;
+    public UndoView undoView;
     private UndoView topUndoView;
     private Bulletin pinBulletin;
     private boolean showPinBulletin;
@@ -1136,6 +1136,14 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         }
         bundle.putInt("message_id", messageId);
         return new ChatActivity(bundle);
+    }
+
+    public Rect undoViewLocation(){
+        Rect location = new Rect();
+        if(contentView != null) {
+            contentView.getGlobalVisibleRect(location);
+        }
+        return location;
     }
 
     public void deleteHistory(int dateSelectedStart, int dateSelectedEnd, boolean forAll) {
@@ -2322,6 +2330,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
 
     public ChatActivity(Bundle args) {
         super(args);
+        ChatMessageCell.parentChatActivity2 = this;
     }
 
     @Override
@@ -3256,7 +3265,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             int n = 15 - chatMessagesCache.size();
             Timer.Task t2 = Timer.start(t, "create ChatMessageCell n=" + n);
             for (int a = 0; a < n; a++) {
-                chatMessagesCache.add(new ChatMessageCell(context, currentAccount,true, sharedResources, themeDelegate));
+                chatMessagesCache.add(new ChatMessageCell(context, currentAccount,true, sharedResources, themeDelegate,this));
             }
             Timer.done(t2);
         }
@@ -9309,14 +9318,30 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         };
         topChatPanelView.addView(bizBotButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.BOTTOM, 0, 0, 0, 2));
     }
-
-    private void createUndoView() {
-        if (undoView != null || getContext() == null) {
+    public void createUndoView() {
+        if (undoView != null) {
             return;
         }
         undoView = new UndoView(getContext(), this, false, themeDelegate);
         undoView.setAdditionalTranslationY(AndroidUtilities.dp(51));
         contentView.addView(undoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT, 8, 0, 8, 8));
+    }
+
+    public void createUndoView(Context context) {
+        if (undoView != null) {
+            return;
+        }
+        undoView = new UndoView(context, this, false, themeDelegate);
+        undoView.setAdditionalTranslationY(AndroidUtilities.dp(51));
+        contentView.addView(undoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT, 8, 0, 8, 8));
+    }
+
+    public void deleteUndoView() {
+        if (undoView != null) {
+            return;
+        }
+        contentView.removeView(undoView);
+        undoView = null;
     }
 
     @Override
@@ -15202,7 +15227,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             return 0;
         }
         if (dummyMessageCell == null) {
-            dummyMessageCell = new ChatMessageCell(getParentActivity(), currentAccount, true, sharedResources, themeDelegate);
+            dummyMessageCell = new ChatMessageCell(getParentActivity(), currentAccount, true, sharedResources, themeDelegate,parentChatActivity);
         }
         dummyMessageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser);
         dummyMessageCell.isSavedChat = chatMode == MODE_SAVED;
@@ -33493,7 +33518,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
                     view = chatMessagesCache.get(0);
                     chatMessagesCache.remove(0);
                 } else {
-                    view = new ChatMessageCell(mContext, currentAccount, true, sharedResources, themeDelegate);
+                    view = new ChatMessageCell(mContext, currentAccount, true, sharedResources, themeDelegate,parentChatActivity);
                 }
                 ChatMessageCell chatMessageCell = (ChatMessageCell) view;
                 chatMessageCell.setResourcesProvider(themeDelegate);
